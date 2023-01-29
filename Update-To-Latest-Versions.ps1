@@ -34,7 +34,14 @@ $new_version_information = $repositories | ForEach-Object {
 
     $localVersion = $localVersions | Where-Object full_name -eq $repository.full_name
 
-    if (!([bool]$localVersion) -or ($localVersion.created_at -eq $remoteVersion.created_at)) {
+    $updatesNeeded = !([bool]$localVersion)
+    if (!$updatesNeeded) {
+        if ($localVersion.created_at -ne $remoteVersion.created_at) {
+            $updatesNeeded = $true
+        }
+    }
+
+    if (!$updatesNeeded) {
         Write-Host "    - The repository $($repository.full_name) does not have any changes."
         
         New-Object -Type PSObject -Property @{
@@ -63,9 +70,6 @@ $new_version_information = $repositories | ForEach-Object {
 
 $new_version_information | ConvertTo-Json | Set-Content -Path $configFilePath
 
-$allPdbFiles = Join-Path $TargetDirectory "*.pdb"
-Remove-Item $allPdbFiles
-$uselessSettings = Join-Path $TargetDirectory "appsettings*.json"
-Remove-Item $uselessSettings
-$uselessSettings = Join-Path $TargetDirectory "web.config"
-Remove-Item $uselessSettings
+Remove-ItemsIfAvailable -TargetDirectory $TargetDirectory -Filter "*.pdb"
+Remove-ItemsIfAvailable -TargetDirectory $TargetDirectory -Filter "appsettings*.json"
+Remove-ItemsIfAvailable -TargetDirectory $TargetDirectory -Filter "web.config"

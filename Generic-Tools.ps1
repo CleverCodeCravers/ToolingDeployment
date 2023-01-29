@@ -77,3 +77,27 @@ function Deploy-Asset {
         Remove-Item -Path $TempDirectory -Recurse | Out-Null
     }
 }
+
+function Remove-ItemsIfAvailable {
+    <#
+        .SYNOPSIS
+        A simple way to delete a bunch of files
+    #>
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory = $true)]
+        [string]$TargetDirectory,
+        [Parameter(Mandatory = $true)]
+        [string]$Filter
+    )
+
+    Process {
+        try {
+            $pathForRemove = Join-Path $TargetDirectory $Filter
+
+            Remove-Item $pathForRemove
+        } catch {
+            # In case there are no matching files it will throw an exception ...
+        }
+    }
+}
