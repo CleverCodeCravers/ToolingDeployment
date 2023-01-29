@@ -5,9 +5,11 @@ param (
 
 Set-Location $PSScriptRoot
 
+Import-Module "$PSScriptRoot\GitHub\GitHub.psm1"
+
 if (!(Test-Path $TargetDirectory)) {
   Write-Host "Target Directory not found, Creating..." -ForegroundColor Green
-  New-Item -ItemType Directory -Path $TargetDirectory
+  New-Item -ItemType Directory -Path $TargetDirectory | Out-Null
 }
 
 $organization = "CleverCodeCravers"
