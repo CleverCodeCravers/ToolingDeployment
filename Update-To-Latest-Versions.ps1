@@ -1,83 +1,67 @@
-# Get command line arguments
 param (
-  [string]$TargetDirectory = "C:\Tools"
+    [Parameter(Mandatory = $true)]
+    [string]$TargetDirectory
 )
+
+Import-Module "$PSScriptRoot\GitHub\GitHub.psm1"
+$ErrorActionPreference = "Stop"
+#Remove-Module GitHub*
+#Import-Module C:\Projekte\ToolingDeployment\GitHub\GitHub.psm1
 
 Set-Location $PSScriptRoot
 
-Import-Module "$PSScriptRoot\GitHub\GitHub.psm1"
+. .\Generic-Tools.ps1
 
-if (!(Test-Path $TargetDirectory)) {
-  Write-Host "Target Directory not found, Creating..." -ForegroundColor Green
-  New-Item -ItemType Directory -Path $TargetDirectory | Out-Null
+Enable-Directory -Path $TargetDirectory
+
+$repositories   = Get-GitHubRepository -UserOrOrganization "CleverCodeCravers"
+$configFilePath = Join-Path -Path $TargetDirectory "version-information.json"
+$localVersions  = Read-JsonFileIfExists -FilePath "$configFilePath" -AlternativeValue $null
+$tempDirectory  = Join-Path $TargetDirectory "TempDirectory"
+$assetfilter    = "*win-x64*"
+if ( [bool]$IsLinux ) {
+    $assetfilter = "*linux*"
 }
 
-$organization = "CleverCodeCravers"
-$apiUrl = "https://api.github.com/orgs/$organization/repos"
-$releasesFile = Join-Path $TargetDirectory "releases.json"
-
-if (!(Test-Path $releasesFile)) {
-  Write-Host "Releases File not found, Generating..." -ForegroundColor Green
-  New-Item -ItemType File -Path $releasesFile
-  $defaultContent = @{
-    repos = @() | ConvertTo-Json
-  }
-  $defaultContent | ConvertTo-Json | Set-Content -Path $releasesFile
-}
-
-$response = Invoke-RestMethod -Uri $apiUrl
-
-foreach ($repository in $response) {
-
-  # Fetch the latest release information
-  $repoName = $repository.name
-  $releaseUrl = $repository.releases_url -replace "{/id}"
-  $release = (Invoke-RestMethod -Uri $releaseUrl)[0]
-
-  if (Test-Path $releasesFile) {
-    $content = Get-Content $releasesFile | ConvertFrom-Json
-    if ($content.repos.$repoName.version -eq $release.tag_name) {
-      Write-Host "Repository $repoName is up to date" -ForegroundColor Green
-      continue
-    }
-  }
+$new_version_information = $repositories | ForEach-Object {
+    $repository = $_
+    Write-Host "  - Checking repository $($repository.full_name)..."
     
-  $assets = $release.assets
-  foreach ($asset in $assets) {
-    # download the zip files that match the operating system (win-x64)
-    if ($asset.name -like "*win-x64*") {
-      $zipFile = $asset.name
-      $folder = $zipFile -replace ".zip", ""
-      Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zipFile
-
-      Expand-Archive -Path $zipFile -Force
-
-      # copy only the exe file to the target directory
-      Get-ChildItem -Filter "*.exe" -Recurse | Copy-Item -Destination $TargetDirectory -Force
-      $exeFileLocation = Get-ChildItem -Filter "*.exe" -Recurse
-
-      Remove-Item -Path $zipFile -Force
-      Remove-Item -Path $folder -Recurse -Force
-
-      $releasesJSON = Get-Content -Raw -Path $releasesFile | ConvertFrom-Json
-          
-      if ($releasesJSON.repos.$repoName) {
-        $newInfo = @{
-          version = $release.tag_name; 
-          zipFile = $zipFile; 
-          exeFile = Join-Path $TargetDirectory $exeFileLocation
-        }
-        $releasesJSON.repos.$repoName = $newInfo
-      }
-      else {
-        $newRepoInfo = @{
-          version = $release.tag_name
-          zipFile = $zipFile
-          exeFile = Join-Path $TargetDirectory $exeFileLocation  
-        }
-        $releasesJSON.repos | Add-Member NoteProperty -Name $repoName -Value $newRepoInfo
-      }
-      $releasesJSON | ConvertTo-Json | Set-Content -Path $releasesFile
+    try {
+        $remoteVersion = Get-GitHubRelease -UserOrOrganization $repository.owner.login -Repository $repository.name -Latest
+    } catch {
+        Write-Host "  - The repository $($repository.full_name) does not have any releases."
+        return
     }
-  }
+
+    $localVersion = $localVersions | Where-Object full_name -eq $repository.full_name
+
+    if (!([bool]$localVersion) -and ($localVersion.created_at -eq $remoteVersion.created_at)) {
+        Write-Host "  - The repository $($repository.full_name) does not have any changes."
+        
+        New-Object -Type PSObject -Property @{
+            full_name  = $localVersion.full_name
+            created_at = $localVersion.created_at
+            tag_name   = $localVersion.tag_name
+        }
+        return
+    }
+
+    $assets = Get-GitHubReleaseAsset -Owner $repository.owner.login -Repository $repository.name -ReleaseId $remoteVersion.id
+
+    foreach ( $asset in $assets ) {
+        if ($asset.name -like $assetfilter) {
+            Write-Host "    - updating asset $($asset.name)..."
+            Deploy-Asset -DownloadUrl $asset.browser_download_url -TargetDirectory $TargetDirectory -TempDirectory $tempDirectory
+        }
+    }
+
+    New-Object -Type PSObject -Property @{
+        full_name  = $repository.full_name
+        created_at = $remoteVersion.created_at
+        tag_name   = $remoteVersion.tag_name
+    }
 }
+
+$new_version_information | ConvertTo-Json | Set-Content -Path $configFilePath
+

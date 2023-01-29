@@ -5,11 +5,11 @@ function Get-GitHubReleaseAsset {
         [Parameter(Mandatory=$true)]
         [string]$Repository,
         [Parameter(Mandatory=$true)]
-        [string]$Tag
+        [string]$ReleaseId
     )
 
     Process {
-        $url = "https://api.github.com/repos/$Owner/$Repository/releases/$Tag/assets"
+        $url = "https://api.github.com/repos/$Owner/$Repository/releases/$ReleaseId/assets"
         $assets = Invoke-RestMethod -Uri $url
     
         $assets
