@@ -18,10 +18,3 @@ Get-GitHubRelease -UserOrOrganization "CleverCodeCravers" -Repository "LittleScr
 $release = Get-GitHubRelease -UserOrOrganization "CleverCodeCravers" -Repository "VisualPairCoding" -Latest
 $asset = Get-GitHubReleaseAsset -Owner "CleverCodeCravers" -Repository "VisualPairCoding" -Tag $release.id 
 $asset.browser_download_url
-
-# Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "C:\path\file"
-# Download the asset
-
-# Extract the asset
-# Expand-Archive -Path $zipFile -Force
-
