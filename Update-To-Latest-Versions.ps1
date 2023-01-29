@@ -5,8 +5,6 @@ param (
 
 Import-Module "$PSScriptRoot\GitHub\GitHub.psm1"
 $ErrorActionPreference = "Stop"
-#Remove-Module GitHub*
-#Import-Module C:\Projekte\ToolingDeployment\GitHub\GitHub.psm1
 
 Set-Location $PSScriptRoot
 
@@ -30,14 +28,14 @@ $new_version_information = $repositories | ForEach-Object {
     try {
         $remoteVersion = Get-GitHubRelease -UserOrOrganization $repository.owner.login -Repository $repository.name -Latest
     } catch {
-        Write-Host "  - The repository $($repository.full_name) does not have any releases."
+        Write-Host "    - The repository $($repository.full_name) does not have any releases."
         return
     }
 
     $localVersion = $localVersions | Where-Object full_name -eq $repository.full_name
 
-    if (!([bool]$localVersion) -and ($localVersion.created_at -eq $remoteVersion.created_at)) {
-        Write-Host "  - The repository $($repository.full_name) does not have any changes."
+    if (!([bool]$localVersion) -or ($localVersion.created_at -eq $remoteVersion.created_at)) {
+        Write-Host "    - The repository $($repository.full_name) does not have any changes."
         
         New-Object -Type PSObject -Property @{
             full_name  = $localVersion.full_name
@@ -65,3 +63,9 @@ $new_version_information = $repositories | ForEach-Object {
 
 $new_version_information | ConvertTo-Json | Set-Content -Path $configFilePath
 
+$allPdbFiles = Join-Path $TargetDirectory "*.pdb"
+Remove-Item $allPdbFiles
+$uselessSettings = Join-Path $TargetDirectory "appsettings*.json"
+Remove-Item $uselessSettings
+$uselessSettings = Join-Path $TargetDirectory "web.config"
+Remove-Item $uselessSettings
